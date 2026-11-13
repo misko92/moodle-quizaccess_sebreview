@@ -1,0 +1,123 @@
+name: Moodle Plugin CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  # Weekly, to catch changes on Moodle's side (e.g. a new release) even without our own pushes.
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4  # Moodle 5.3+ requires MariaDB 11.4.
+        env:
+          MYSQL_USER: root
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+          MYSQL_CHARACTER_SET_SERVER: utf8mb4
+          MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.4"
+            moodle-branch: MOODLE_502_STABLE
+          # Latest stable.
+          - php: "8.4"
+            moodle-branch: MOODLE_503_STABLE
+          # Early warning: Moodle's development branch (currently 6.0dev). Allowed to fail.
+          - php: "8.4"
+            moodle-branch: main
+            experimental: true
+
+    name: Moodle ${{ matrix.moodle-branch }} / PHP ${{ matrix.php }}
+    continue-on-error: ${{ matrix.experimental == true }}
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, mysqli, gd, zip, intl, xmlrpc, soap, sodium
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Set up Node (LTS)
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin && pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin && pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Initialise Moodle + install plugin
+        env:
+          DB: mariadb
+          MOODLE_BRANCH: ${{ matrix.moodle-branch }}
+        run: moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+
+      - name: PHP Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phplint
+
+      - name: PHP Mess Detector
+        continue-on-error: true
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpmd
+
+      - name: Moodle Code Checker
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpcs --max-warnings 0
+
+      - name: Moodle PHPDoc Checker
+        continue-on-error: true
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0
+
+      - name: Validate plugin structure
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci validate
+
+      - name: Check upgrade savepoints
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci savepoints
+
+      - name: Mustache Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci mustache
+
+      - name: Grunt (JS/CSS lint and build check)
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci grunt --max-lint-warnings 0
+
+      - name: PHPUnit tests
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpunit --fail-on-warning
+
+      - name: Behat features
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci behat --profile chrome
