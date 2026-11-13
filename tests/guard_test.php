@@ -92,7 +92,7 @@ final class guard_test extends \advanced_testcase {
         $quizobj = \mod_quiz\quiz_settings::create($this->quiz->id);
         $rule = \quizaccess_sebreview::make($quizobj, time(), false);
         $this->assertInstanceOf(\quizaccess_sebreview::class, $rule);
-        $this->assertEquals(get_string('description', 'quizaccess_sebreview'), $rule->description());
+        $this->assertEquals([get_string('description', 'quizaccess_sebreview')], $rule->description());
 
         // Missing from the data (e.g. generator): unchanged.
         \quizaccess_sebreview::save_settings((object)['id' => $this->quiz->id]);
@@ -220,6 +220,60 @@ final class guard_test extends \advanced_testcase {
         } catch (\moodle_exception $e) {
             $this->assertEquals('redirecterrordetected', $e->errorcode);
         }
+    }
+
+    /**
+     * Description of the rule for the current user, as the quiz page shows it.
+     *
+     * @param \stdClass $quiz
+     * @return array
+     */
+    protected function get_description(\stdClass $quiz): array {
+        guard::reset_cache();
+        $quizobj = \mod_quiz\quiz_settings::create($quiz->id);
+        return \quizaccess_sebreview::make($quizobj, time(), false)->description();
+    }
+
+    public function test_quiz_page_offers_launch_when_no_attempts_left(): void {
+        global $DB;
+        [$quiz, , ] = $this->make_finished_attempt(settings_provider::USE_SEB_CONFIG_MANUALLY);
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 Chrome';
+        $later = \mod_quiz\question\display_options::IMMEDIATELY_AFTER | \mod_quiz\question\display_options::LATER_WHILE_OPEN;
+
+        // Attempts left: core's Safe Exam Browser rule shows its own buttons.
+        $DB->update_record('quiz', ['id' => $quiz->id, 'attempts' => 0, 'reviewattempt' => $later]);
+        $this->assertCount(1, $this->get_description($quiz));
+
+        // No attempts left and the attempt may be reviewed: offer the way in.
+        $DB->set_field('quiz', 'attempts', 1, ['id' => $quiz->id]);
+        $messages = $this->get_description($quiz);
+        $this->assertCount(2, $messages);
+        $this->assertStringContainsString('sebs://', $messages[1]);
+        $this->assertStringContainsString(get_string('seblinkbutton', 'quizaccess_seb'), $messages[1]);
+
+        // Follows the showseblinks setting.
+        set_config('showseblinks', 'http', 'quizaccess_seb');
+        $messages = $this->get_description($quiz);
+        $this->assertStringNotContainsString('sebs://', $messages[1]);
+        $this->assertStringContainsString(get_string('httplinkbutton', 'quizaccess_seb'), $messages[1]);
+        set_config('showseblinks', 'seb,http', 'quizaccess_seb');
+
+        // Review not allowed now: nothing to see in Safe Exam Browser either.
+        $DB->set_field('quiz', 'reviewattempt', \mod_quiz\question\display_options::DURING, ['id' => $quiz->id]);
+        $this->assertCount(1, $this->get_description($quiz));
+    }
+
+    public function test_quiz_page_no_launch_for_teacher_or_client_config(): void {
+        global $DB;
+        $later = \mod_quiz\question\display_options::IMMEDIATELY_AFTER | \mod_quiz\question\display_options::LATER_WHILE_OPEN;
+        [$quiz, , ] = $this->make_finished_attempt(settings_provider::USE_SEB_CLIENT_CONFIG);
+        $DB->update_record('quiz', ['id' => $quiz->id, 'attempts' => 1, 'reviewattempt' => $later]);
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 Chrome';
+        // Client configuration: nothing to launch.
+        $this->assertCount(1, $this->get_description($quiz));
+
+        $this->setAdminUser();
+        $this->assertCount(1, $this->get_description($quiz));
     }
 
     public function test_usage_id_from_path(): void {

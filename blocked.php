@@ -39,28 +39,12 @@ $PAGE->set_heading($quizobj->get_course()->fullname);
 $PAGE->activityheader->disable();
 
 $manager = new seb_access_manager($quizobj);
-$buttons = '';
 if ($manager->seb_required() && $manager->should_validate_config_key()) {
     $message = get_string('blockedmessage', 'quizaccess_sebreview');
-    $linkconfig = explode(',', (string)get_config('quizaccess_seb', 'showseblinks'));
-    if (in_array('seb', $linkconfig)) {
-        // A plain link, not a form button, so browsers don't warn about the sebs:// scheme.
-        $buttons .= html_writer::link(
-            \quizaccess_seb\link_generator::get_link($cm->id, true, is_https()),
-            get_string('seblinkbutton', 'quizaccess_seb'),
-            ['class' => 'btn btn-primary me-2 mb-2']
-        );
-    }
-    if (in_array('http', $linkconfig)) {
-        $buttons .= html_writer::link(
-            \quizaccess_seb\link_generator::get_link($cm->id, false, is_https()),
-            get_string('httplinkbutton', 'quizaccess_seb'),
-            ['class' => 'btn btn-secondary me-2 mb-2']
-        );
-    }
 } else {
     $message = get_string('blockedmessageclient', 'quizaccess_sebreview');
 }
+$buttons = \quizaccess_sebreview\local\guard::get_seb_buttons($quizobj);
 $buttons .= html_writer::link(
     $quizobj->view_url(),
     get_string('backtoquiz', 'quizaccess_sebreview'),

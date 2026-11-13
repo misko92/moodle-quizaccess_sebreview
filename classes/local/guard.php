@@ -249,6 +249,40 @@ class guard {
     }
 
     /**
+     * Buttons that open this quiz in Safe Exam Browser, following the quizaccess_seb "showseblinks" setting.
+     *
+     * Empty when the quiz uses a client-side configuration (nothing to launch).
+     *
+     * @param quiz_settings $quizobj
+     * @return string HTML
+     */
+    public static function get_seb_buttons(quiz_settings $quizobj): string {
+        $manager = new seb_access_manager($quizobj);
+        if (!$manager->seb_required() || !$manager->should_validate_config_key()) {
+            return '';
+        }
+        $cmid = $quizobj->get_cmid();
+        $linkconfig = explode(',', (string)get_config('quizaccess_seb', 'showseblinks'));
+        $buttons = '';
+        if (in_array('seb', $linkconfig)) {
+            // A plain link, not a form button, so browsers don't warn about the sebs:// scheme.
+            $buttons .= \html_writer::link(
+                \quizaccess_seb\link_generator::get_link($cmid, true, is_https()),
+                get_string('seblinkbutton', 'quizaccess_seb'),
+                ['class' => 'btn btn-primary me-2 mb-2']
+            );
+        }
+        if (in_array('http', $linkconfig)) {
+            $buttons .= \html_writer::link(
+                \quizaccess_seb\link_generator::get_link($cmid, false, is_https()),
+                get_string('httplinkbutton', 'quizaccess_seb'),
+                ['class' => 'btn btn-secondary me-2 mb-2']
+            );
+        }
+        return $buttons;
+    }
+
+    /**
      * Fetch the attempt fields we need, or null.
      *
      * @param array $conditions

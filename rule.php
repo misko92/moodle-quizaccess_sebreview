@@ -40,7 +40,62 @@ class quizaccess_sebreview extends access_rule_base {
 
     #[\Override]
     public function description() {
-        return get_string('description', 'quizaccess_sebreview');
+        $messages = [get_string('description', 'quizaccess_sebreview')];
+        if ($this->should_offer_launch()) {
+            $buttons = \quizaccess_sebreview\local\guard::get_seb_buttons($this->quizobj);
+            if ($buttons !== '') {
+                $messages[] = \html_writer::div($buttons, 'mt-2');
+            }
+        }
+        return $messages;
+    }
+
+    /**
+     * Should the quiz page offer a way into Safe Exam Browser to review a finished attempt?
+     *
+     * Core's Safe Exam Browser rule only shows its launch buttons when a new attempt can be
+     * started, so once a student has used their attempts there is no way back in. Offer the
+     * buttons then, but only when there is something to review there.
+     *
+     * @return bool
+     */
+    protected function should_offer_launch(): bool {
+        global $CFG, $USER;
+        if (!isloggedin() || isguestuser()) {
+            return false;
+        }
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+        $attempts = quiz_get_user_attempts($this->quiz->id, $USER->id, 'all');
+        if (!$attempts) {
+            return false;
+        }
+        $finished = [];
+        foreach ($attempts as $attempt) {
+            if ($attempt->state === \mod_quiz\quiz_attempt::IN_PROGRESS || $attempt->state === \mod_quiz\quiz_attempt::OVERDUE) {
+                // Core shows its own launch buttons to continue the attempt.
+                return false;
+            }
+            $finished[] = $attempt;
+        }
+        $last = end($finished);
+        if (!$this->quizobj->get_access_manager($this->timenow)->prevent_new_attempt(count($finished), $last)) {
+            // A new attempt can be started, so core shows its launch buttons.
+            return false;
+        }
+        foreach ($finished as $attempt) {
+            if (\quizaccess_sebreview\local\guard::may_review($attempt, true)) {
+                // Already in Safe Exam Browser, or allowed to review anywhere.
+                return false;
+            }
+            $options = \mod_quiz\question\display_options::make_from_quiz(
+                $this->quiz,
+                quiz_attempt_state($this->quiz, $attempt)
+            );
+            if ($options->attempt) {
+                return true;
+            }
+        }
+        return false;
     }
 
     #[\Override]
