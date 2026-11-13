@@ -243,6 +243,11 @@ class guard {
         if (!$strict || !$manager->seb_required()) {
             return true;
         }
+        if ($manager->validate_session_access()) {
+            // Newer Safe Exam Browser versions send their keys through JavaScript on the quiz page
+            // instead of headers; Moodle then remembers in the session that the keys were valid.
+            return true;
+        }
         return $manager->validate_basic_header()
             && $manager->validate_config_key()
             && $manager->validate_browser_exam_key();

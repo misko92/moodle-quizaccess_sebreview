@@ -65,6 +65,10 @@ class quizaccess_sebreview extends access_rule_base {
             return false;
         }
         require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+        if ((new \quizaccess_seb\seb_access_manager($this->quizobj))->is_using_seb()) {
+            // Already in Safe Exam Browser: launching it again would only confuse.
+            return false;
+        }
         $attempts = quiz_get_user_attempts($this->quiz->id, $USER->id, 'all');
         if (!$attempts) {
             return false;

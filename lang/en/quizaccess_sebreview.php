@@ -28,6 +28,7 @@ $string['backtoquiz'] = 'Back to the quiz';
 $string['blockedheading'] = 'Review only in Safe Exam Browser';
 $string['blockedmessage'] = 'You can only review your attempts at this quiz in Safe Exam Browser. Open the quiz in Safe Exam Browser, then use the Review link there.';
 $string['blockedmessageclient'] = 'You can only review your attempts at this quiz in Safe Exam Browser. Start Safe Exam Browser, go to this quiz, then use the Review link there.';
+$string['checkingseb'] = 'Checking Safe Exam Browser… If the review does not open, go back to the quiz page and try again.';
 $string['description'] = 'You can only review your attempts at this quiz in Safe Exam Browser.';
 $string['enabled'] = 'Review only in Safe Exam Browser';
 $string['enabled_help'] = 'If enabled, students can only open the review of their attempts (questions, feedback, right answers) in Safe Exam Browser. In any other browser, or in the Moodle app, they are told to use Safe Exam Browser instead.

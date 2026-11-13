@@ -38,13 +38,31 @@ $PAGE->set_title(get_string('blockedheading', 'quizaccess_sebreview'));
 $PAGE->set_heading($quizobj->get_course()->fullname);
 $PAGE->activityheader->disable();
 
-$manager = new seb_access_manager($quizobj);
-if ($manager->seb_required() && $manager->should_validate_config_key()) {
-    $message = get_string('blockedmessage', 'quizaccess_sebreview');
-} else {
-    $message = get_string('blockedmessageclient', 'quizaccess_sebreview');
+$fullattempt = $DB->get_record('quiz_attempts', ['id' => $attemptid], 'id, quiz, userid, state, uniqueid', MUST_EXIST);
+if (\quizaccess_sebreview\local\guard::may_review($fullattempt, true)) {
+    // Nothing to block (any more), e.g. Safe Exam Browser keys were just checked: go on to the review.
+    redirect(new moodle_url('/mod/quiz/review.php', ['attempt' => $attemptid, 'cmid' => $cm->id]));
 }
-$buttons = \quizaccess_sebreview\local\guard::get_seb_buttons($quizobj);
+
+$manager = new seb_access_manager($quizobj);
+if ($manager->is_using_seb()) {
+    // In Safe Exam Browser, but its keys have not been checked yet for this session. Newer versions only
+    // give their keys to JavaScript: let the Safe Exam Browser rule check them, it reloads this page if valid.
+    $message = get_string('checkingseb', 'quizaccess_sebreview');
+    $buttons = '';
+    $PAGE->requires->js_call_amd(
+        'quizaccess_seb/validate_quiz_access',
+        'init',
+        [$cm->id, (bool)get_config('quizaccess_seb', 'autoreconfigureseb')]
+    );
+} else {
+    if ($manager->seb_required() && $manager->should_validate_config_key()) {
+        $message = get_string('blockedmessage', 'quizaccess_sebreview');
+    } else {
+        $message = get_string('blockedmessageclient', 'quizaccess_sebreview');
+    }
+    $buttons = \quizaccess_sebreview\local\guard::get_seb_buttons($quizobj);
+}
 $buttons .= html_writer::link(
     $quizobj->view_url(),
     get_string('backtoquiz', 'quizaccess_sebreview'),

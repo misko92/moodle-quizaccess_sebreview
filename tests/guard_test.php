@@ -16,6 +16,7 @@
 
 namespace quizaccess_sebreview;
 
+use quizaccess_seb\seb_access_manager;
 use quizaccess_seb\seb_quiz_settings;
 use quizaccess_seb\settings_provider;
 use quizaccess_sebreview\local\guard;
@@ -273,6 +274,28 @@ final class guard_test extends \advanced_testcase {
         $this->assertCount(1, $this->get_description($quiz));
 
         $this->setAdminUser();
+        $this->assertCount(1, $this->get_description($quiz));
+    }
+
+    public function test_keys_checked_by_javascript_count_as_seb(): void {
+        [$quiz, , $attempt] = $this->make_finished_attempt(settings_provider::USE_SEB_CONFIG_MANUALLY);
+        // Newer Safe Exam Browser: user agent, but no key headers.
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 SEB/3.5';
+        $this->assertFalse(guard::may_review($attempt, true));
+        // The Safe Exam Browser rule's JavaScript check passed for this session.
+        (new seb_access_manager(\mod_quiz\quiz_settings::create($quiz->id)))->set_session_access(true);
+        $this->assertTrue(guard::may_review($attempt, true));
+        // A normal browser never counts, whatever the session says.
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 Chrome';
+        $this->assertFalse(guard::may_review($attempt, true));
+    }
+
+    public function test_quiz_page_no_launch_inside_seb(): void {
+        global $DB;
+        $later = \mod_quiz\question\display_options::IMMEDIATELY_AFTER | \mod_quiz\question\display_options::LATER_WHILE_OPEN;
+        [$quiz, , ] = $this->make_finished_attempt(settings_provider::USE_SEB_CONFIG_MANUALLY);
+        $DB->update_record('quiz', ['id' => $quiz->id, 'attempts' => 1, 'reviewattempt' => $later]);
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 SEB/3.5';
         $this->assertCount(1, $this->get_description($quiz));
     }
 
